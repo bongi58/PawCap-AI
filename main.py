@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from ai_helper import generate_structured_quiz, generate_summary
-from database import SessionLocal, QuizScore, init_db, save_quiz_score
+from database import QuizScore, SessionLocal, init_db, save_quiz_score
 
 # Veritabanını başlat
 init_db()
@@ -25,7 +25,6 @@ def clean_temp_file(file_path):
 
 
 def get_all_scores():
-    """Veritabanından tüm geçmiş sınav skorlarını çeker."""
     db = SessionLocal()
     try:
         return db.query(QuizScore).all()
@@ -43,7 +42,7 @@ if "quiz_submitted" not in st.session_state:
 if "current_topic" not in st.session_state:
     st.session_state.current_topic = "Genel Ders İçeriği"
 
-# Sayfa Ayarları (Geniş ve Profesyonel Görünüm)
+# Sayfa Ayarları
 st.set_page_config(
     page_title="PawCap - AI Study Buddy", page_icon="🐾", layout="wide"
 )
@@ -67,19 +66,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ÜST BAŞLIK VE ANA SEKMELER
 st.title("🐾 PawCap AI")
 st.subheader("İnteraktif Yapay Zeka Ders Asistanı & Gelişim Takip Platformu")
 st.write("---")
 
-# Jürinin gözünü dolduracak Ana Uygulama Sekmeleri
 app_tab1, app_tab2 = st.tabs(
     ["📚 Çalışma Odası (Özet & Quiz)", "📊 Öğrenci İlerleme Paneli (Dashboard)"]
 )
 
-# ==========================================
-# SEKTÖR 1: ÇALIŞMA ODASI
-# ==========================================
 with app_tab1:
     st.markdown("### 📥 1. Adım: Ders İçeriğini Yükle")
     media_tab1, media_tab2, media_tab3 = st.tabs(
@@ -155,7 +149,6 @@ with app_tab1:
             else:
                 st.warning("⚠️ Lütfen önce bir içerik yükleyin.")
 
-    # --- 🎯 İNTERAKTİF QUİZ RENDER ALANI ---
     if st.session_state.quiz_data:
         st.write("---")
         st.markdown("### 📝 Kendini Test Et")
@@ -187,7 +180,7 @@ with app_tab1:
 
             dogru_sayisi = 0
             toplam_soru = len(questions)
-            yanlis_sorular = []  # Hata koçu için yanlışları biriktiriyoruz
+            yanlis_sorular = []
 
             for idx, q_data in enumerate(questions):
                 kullanici_cevabi = st.session_state.selected_answers.get(
@@ -208,7 +201,6 @@ with app_tab1:
 
                     st.info(f"💡 **Açıklama:** {q_data['explanation']}")
 
-            # Puan Metriği
             basari_yuzdesi = int((dogru_sayisi / toplam_soru) * 100)
             st.metric(
                 label="Başarı Puanın",
@@ -216,12 +208,10 @@ with app_tab1:
                 delta=f"%{basari_yuzdesi}",
             )
 
-            # Veritabanına Skoru Kaydet
             save_quiz_score(
                 st.session_state.current_topic, dogru_sayisi, toplam_soru
             )
 
-            # --- 🧠 YAPAY ZEKA HATA KOÇU (AI MISTAKE ROUTER) ---
             if yanlis_sorular:
                 st.write("---")
                 st.markdown("### 🧠 PawCap Hata Koçu Tavsiyesi")
@@ -237,9 +227,6 @@ with app_tab1:
                 )
 
 
-# ==========================================
-# SEKTÖR 2: ÖĞRENCİ İLERLEME PANELİ (DASHBOARD)
-# ==========================================
 with app_tab2:
     st.markdown("### 📊 Akademik Başarı ve Gelişim İzleme Paneli")
     scores = get_all_scores()
@@ -249,10 +236,38 @@ with app_tab2:
             "Henüz kayıtlı bir sınav verisi yok. Çalışma odasında birkaç quiz çözdükçe grafikler burada otomatik oluşacaktır."
         )
     else:
-        # Veritabanı verisini Pandas DataFrame'e dönüştür
         df = pd.DataFrame(
             [
                 {
                     "Konu": s.topic,
                     "Doğru": s.score,
-                    "Toplam
+                    "Toplam": s.total_questions,
+                    "Yüzde": int((s.score / s.total_questions) * 100),
+                    "Tarih": s.created_at.strftime("%d-%m-%Y %H:%M"),
+                }
+                for s in scores
+            ]
+        )
+
+        dash_col1, dash_col2, dash_col3 = st.columns(3)
+        with dash_col1:
+            st.metric("Çözülen Toplam Quiz", len(df))
+        with dash_col2:
+            st.metric("Ortalama Başarı", f"%{int(df['Yüzde'].mean())}")
+        with dash_col3:
+            st.metric("Çözülen Toplam Soru", int(df["Toplam"].sum()))
+
+        st.write("---")
+        st.markdown("#### 📈 Sınav Başarı Eğrisi (%)")
+        st.line_chart(df.set_index("Tarih")["Yüzde"])
+
+        st.markdown("#### 🎯 Konu Bazlı Doğru/Yanlış Analizi")
+        df["Yanlış"] = df["Toplam"] - df["Doğru"]
+        chart_df = df[["Konu", "Doğru", "Yanlış"]].set_index("Konu")
+        st.bar_chart(chart_df)
+
+        st.markdown("#### 🗄️ Geçmiş Sınav Kayıtları (Veritabanı Dökümü)")
+        st.dataframe(
+            df[["Tarih", "Konu", "Doğru", "Toplam", "Yüzde"]],
+            use_container_width=True,
+        )
