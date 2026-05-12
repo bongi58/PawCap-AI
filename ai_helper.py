@@ -7,12 +7,10 @@ from google.genai import types
 from pydantic import BaseModel, Field
 import streamlit as st
 
-# --- AKILLI ŞİFRE YÜKLEME (LOCAL & CLOUD HİBRİT) ---
-# 1. Önce Streamlit Cloud'un gizli sekmesinde (st.secrets) şifre var mı diye bak
+# --- AKILLI ŞİFRE YÜKLEME ---
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
-    # 2. Eğer bulutta değilsek (kendi bilgisayarımızdaysak) .env dosyasını oku
     load_dotenv()
     api_key = os.getenv("GEMINI_API_KEY")
 
@@ -21,27 +19,29 @@ if not api_key:
         "⚠️ GEMINI_API_KEY bulunamadı! Lütfen Streamlit Secrets veya .env ayarlarınızı kontrol edin."
     )
 
-# İstemci Bağlantısı
 client = genai.Client(api_key=api_key)
 MODEL_NAME = "gemini-2.5-flash"
 
 
-# --- PYDANTIC JSON ŞEMALARI ---
+# --- PYDANTIC ŞEMALARI ---
 class QuestionSchema(BaseModel):
     question_text: str = Field(description="Sorunun kök metni")
-    options: list[str] = Field(
-        description="A, B, C, D şeklinde 4 adet şıkkın tam listesi"
-    )
-    correct_answer: str = Field(description="Doğru olan şıkkın tam metni")
-    explanation: str = Field(
-        description="Bu cevabın neden doğru olduğunun detaylı ve öğretici açıklaması"
-    )
+    options: list[str] = Field(description="4 adet şıkkın listesi")
+    correct_answer: str = Field(description="Doğru olan şık")
+    explanation: str = Field(description="Açıklama")
 
 
 class QuizSchema(BaseModel):
-    questions: list[QuestionSchema] = Field(
-        description="Hazırlanan soruların listesi"
-    )
+    questions: list[QuestionSchema]
+
+
+class Flashcard(BaseModel):
+    front: str = Field(description="Kartın ön yüzü (Kavram/Soru)")
+    back: str = Field(description="Kartın arka yüzü (Cevap/Açıklama)")
+
+
+class FlashcardSchema(BaseModel):
+    cards: list[Flashcard]
 
 
 def process_content(prompt_text, text_content=None, file_path=None, config=None):
@@ -89,5 +89,18 @@ def generate_structured_quiz(text_content=None, file_path=None):
     )
     raw_json = process_content(
         prompt, text_content, file_path, config=quiz_config
+    )
+    return json.loads(raw_json)
+
+
+def generate_flashcards(text_content=None, file_path=None):
+    prompt = """
+    Sen PawCap'sin. Eklenen ders içeriğini analiz et ve öğrencinin konuyu hızlıca tekrar edip ezberleyebilmesi için en önemli 5 kavram/soru üzerinden önlü arkalı çalışma kartları (flashcards) hazırla.
+    """
+    flashcard_config = types.GenerateContentConfig(
+        response_mime_type="application/json", response_schema=FlashcardSchema
+    )
+    raw_json = process_content(
+        prompt, text_content, file_path, config=flashcard_config
     )
     return json.loads(raw_json)
