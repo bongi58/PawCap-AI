@@ -96,3 +96,16 @@ def save_quiz_score(topic, score, total_questions):
         new_score = QuizScore(topic=topic[:50], score=score, total_questions=total_questions)
         db.add(new_score)
         db.commit()
+
+def get_all_quiz_scores():
+    with get_db() as db:
+        return db.query(QuizScore).order_by(QuizScore.created_at.asc()).all()
+   
+def update_chat_session_title(session_id, new_title):
+    with get_db() as db:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        # Sadece başlık "Yeni Sohbet" ise güncelle (yani ilk mesajda)
+        if session and session.title == "Yeni Sohbet":
+            # Başlık çok uzun olmasın diye ilk 30 karakterini alıp sonuna ... koyuyoruz
+            session.title = (new_title[:30] + "...") if len(new_title) > 30 else new_title
+            db.commit()
