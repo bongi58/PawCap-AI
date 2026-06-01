@@ -66,21 +66,19 @@ with st.sidebar:
     tab_todo, tab_time = st.tabs(["✅ To-Do", "⏳ Çizelge"])
     
     with tab_todo:
-        st.caption("Görev eklemek için alt satıra tıkla:")
+        st.caption("Görevi silmek için solundaki numarayı seçip klavyenden 'Delete' tuşuna basabilirsin:")
         st.session_state.todo_list = st.data_editor(
             st.session_state.todo_list, 
             num_rows="dynamic", 
-            use_container_width=True, 
-            hide_index=True
+            use_container_width=True
         )
         
     with tab_time:
-        st.caption("Saat aralıklarını ve planını yaz:")
+        st.caption("Saat aralıklarını ve planını yaz (Silmek için numarayı seçip Delete'e bas):")
         st.session_state.time_blocks = st.data_editor(
             st.session_state.time_blocks, 
             num_rows="dynamic", 
-            use_container_width=True, 
-            hide_index=True
+            use_container_width=True
         )
 
     st.write("---")
