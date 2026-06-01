@@ -2,13 +2,14 @@ import os
 import time
 import pandas as pd
 import streamlit as st
-from ai_helper import generate_structured_quiz, generate_summary, generate_flashcards
+from ai_helper import generate_structured_quiz, generate_summary, generate_flashcards, process_content
 from database import (
     init_db, save_quiz_score, create_new_chat_session,
     get_all_chat_sessions, get_messages_for_session, save_chat_message,
     earn_badge, get_my_badges, get_all_quiz_scores, update_chat_session_title
 )
 
+# Veritabanını başlat
 init_db()
 
 TEMP_DIR = "temp_uploads"
@@ -39,11 +40,13 @@ st.markdown(
     """, unsafe_allow_html=True,
 )
 
-# State Başlatma
+# State Başlatma (Planlayıcı verileri eklendi)
 defaults = {
     "current_session_id": None, "flashcards": None, "quiz_data": None,
     "selected_answers": {}, "quiz_submitted": False, "active_content_name": "Genel İçerik",
-    "temp_text_input": "", "temp_file_path": None
+    "temp_text_input": "", "temp_file_path": None,
+    "todo_list": pd.DataFrame([{"Durum": False, "Görev": "DGS Denemesi Çöz"}]),
+    "time_blocks": pd.DataFrame([{"Saat": "09:00-11:00", "Aktivite": "Python Çalış"}])
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -58,7 +61,30 @@ with st.sidebar:
 
     st.write("---")
     
-    # Dosya Yükleme Alanı Artık Burada!
+    # YENİ ÖZELLİK: GÜNLÜK PLANLAYICI
+    st.markdown("### 📅 Günlük Planlayıcı")
+    tab_todo, tab_time = st.tabs(["✅ To-Do", "⏳ Çizelge"])
+    
+    with tab_todo:
+        st.caption("Görev eklemek için alt satıra tıkla:")
+        st.session_state.todo_list = st.data_editor(
+            st.session_state.todo_list, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            hide_index=True
+        )
+        
+    with tab_time:
+        st.caption("Saat aralıklarını ve planını yaz:")
+        st.session_state.time_blocks = st.data_editor(
+            st.session_state.time_blocks, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+    st.write("---")
+    
     st.markdown("### 📥 Ders Materyali Ekle")
     f = st.file_uploader("PDF veya Ses Yükle", type=["pdf", "mp4", "mp3"], label_visibility="collapsed")
     t = st.text_area("Veya metin yapıştır:", height=100)
@@ -80,7 +106,6 @@ with st.sidebar:
 
     st.write("---")
     
-    # Gelişim İstatistikleri Alanı
     with st.expander("📊 Gelişim İstatistiklerim"):
         scores = get_all_quiz_scores()
         if scores:
@@ -116,7 +141,7 @@ if not st.session_state.current_session_id:
     st.markdown(
         """<div style='text-align:center; padding-top:80px;'>
         <h1 style='color:#ff85a1; font-size:45px;'>PawCap AI Asistanına Hoş Geldin</h1>
-        <p style='color:#8a606d; font-size:18px;'>Sol menüden materyalini ekle ve sohbete başla.</p>
+        <p style='color:#8a606d; font-size:18px;'>Sol menüden planını yap, materyalini ekle ve sohbete başla.</p>
         </div>""", unsafe_allow_html=True,
     )
 else:
@@ -133,10 +158,10 @@ else:
             st.markdown(msg.content)
 
     # Sohbet Girdisi (Prompt)
-    if prompt := st.chat_input("Bana bir görev ver... (Örn: Bu notları özetle)"):
+    if prompt := st.chat_input("Bana bir görev ver veya sohbet et..."):
         save_chat_message(st.session_state.current_session_id, "user", prompt)
         
-        # YENİ ÖZELLİK: Sohbet başlığını kullanıcının ilk mesajıyla güncelle
+        # Sohbet başlığını kullanıcının ilk mesajıyla güncelle
         update_chat_session_title(st.session_state.current_session_id, prompt)
 
         with st.chat_message("user", avatar="user"):
@@ -146,13 +171,16 @@ else:
         active_f = st.session_state.temp_file_path
 
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-            if not active_f and not safe_text:
-                warning_msg = "⚠️ İşlem yapabilmem için sol menüden bir dosya yüklemeli veya metin yapıştırmalısın!"
-                st.write(warning_msg)
-                save_chat_message(st.session_state.current_session_id, "assistant", warning_msg)
-            else:
-                try:
-                    if "özet" in prompt.lower():
+            p_lower = prompt.lower()
+            
+            try:
+                # 1. ÖZET İSTEĞİ
+                if "özet" in p_lower or "kısaca" in p_lower:
+                    if not active_f and not safe_text:
+                        warning_msg = "⚠️ Özet çıkarmam için sol menüden bir dosya yüklemeli veya metin yapıştırmalısın!"
+                        st.write(warning_msg)
+                        save_chat_message(st.session_state.current_session_id, "assistant", warning_msg)
+                    else:
                         with st.spinner("İçerik analiz edilip özetleniyor..."):
                             res = generate_summary(text_content=safe_text, file_path=active_f)
                             st.markdown(res)
@@ -167,7 +195,13 @@ else:
                             )
                             st.session_state.flashcards, st.session_state.quiz_data = None, None
 
-                    elif "quiz" in prompt.lower() or "test" in prompt.lower():
+                # 2. QUİZ İSTEĞİ
+                elif "quiz" in p_lower or "test" in p_lower or "soru" in p_lower:
+                    if not active_f and not safe_text:
+                        warning_msg = "⚠️ Soru hazırlayabilmem için sol menüden bir not veya dosya eklemelisin!"
+                        st.write(warning_msg)
+                        save_chat_message(st.session_state.current_session_id, "assistant", warning_msg)
+                    else:
                         with st.spinner("İnteraktif sorular hazırlanıyor..."):
                             st.session_state.quiz_data = generate_structured_quiz(text_content=safe_text, file_path=active_f)
                             st.session_state.selected_answers, st.session_state.quiz_submitted, st.session_state.flashcards = {}, False, None
@@ -176,7 +210,13 @@ else:
                             save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Sınav Avcısı", "🎯")
 
-                    elif "flashcard" in prompt.lower() or "kart" in prompt.lower():
+                # 3. FLASHCARD İSTEĞİ
+                elif "flashcard" in p_lower or "kart" in p_lower:
+                    if not active_f and not safe_text:
+                        warning_msg = "⚠️ Kart hazırlayabilmem için sol menüden içeriği eklemelisin!"
+                        st.write(warning_msg)
+                        save_chat_message(st.session_state.current_session_id, "assistant", warning_msg)
+                    else:
                         with st.spinner("Ezber kartları derleniyor..."):
                             st.session_state.flashcards = generate_flashcards(text_content=safe_text, file_path=active_f)
                             st.session_state.quiz_data = None
@@ -184,21 +224,23 @@ else:
                             st.write(resp_msg)
                             save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Hafıza Şampiyonu", "🧠")
-                    else:
-                        resp = "Harika! İçeriği aldım. Benden 'Özet', 'Quiz' veya 'Flashcard' hazırlamamı isteyebilirsin."
-                        st.write(resp)
-                        save_chat_message(st.session_state.current_session_id, "assistant", resp)
-                
-                except Exception as e:
-                    st.error(f"İşlem sırasında bir hata oluştu: {str(e)}")
-                
-                finally:
-                    if active_f and os.path.exists(active_f):
-                        os.remove(active_f)
-                        st.session_state.temp_file_path = None
+                            
+                # 4. NORMAL SOHBET (Yapay Zeka Devrede!)
+                else:
+                    with st.spinner("PawCap düşünüyor..."):
+                        res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f)
+                        st.markdown(res)
+                        save_chat_message(st.session_state.current_session_id, "assistant", res)
+                        
+            except Exception as e:
+                st.error(f"İşlem sırasında bir hata oluştu: {str(e)}")
+            
+            finally:
+                if active_f and os.path.exists(active_f):
+                    os.remove(active_f)
+                    st.session_state.temp_file_path = None
 
     # --- Flashcard & Quiz Modülleri ---
-    
     if st.session_state.flashcards:
         with st.markdown('<div class="premium-card">', unsafe_allow_html=True):
             st.markdown("### 🃏 Flashcard Çalışma Modu")
