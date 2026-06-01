@@ -26,11 +26,7 @@ st.markdown(
     <style>
     .stApp { background-color: #fff5f8; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: white; border-right: 2px solid #ffeef2; }
-    .stButton>button { 
-        background: linear-gradient(135deg, #ff85a1 0%, #ff6b8b 100%); 
-        color: white; border-radius: 12px; font-weight: bold; border: none;
-        box-shadow: 0 4px 10px rgba(255,107,139,0.2); transition: all 0.3s;
-    }
+    .stButton>button { background: linear-gradient(135deg, #ff85a1 0%, #ff6b8b 100%); color: white; border-radius: 12px; font-weight: bold; border: none; box-shadow: 0 4px 10px rgba(255,107,139,0.2); transition: all 0.3s; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(255,107,139,0.3); }
     .badge-box { background: #fff; padding: 10px; border-radius: 10px; border: 1px solid #ffeef2; margin-bottom: 5px; text-align: center; font-size: 20px; }
     .flashcard { background: white; padding: 30px; border-radius: 20px; text-align: center; border: 2px solid #ff85a1; box-shadow: 0 10px 20px rgba(255,133,161,0.1); margin: 10px 0; font-size: 18px; }
@@ -40,38 +36,25 @@ st.markdown(
     [data-testid="stChatMessage"]:nth-child(even) p { color: white !important; }
     [data-testid="stChatMessage"]:nth-child(odd) { background-color: white; color: #8a606d; margin-right: 20%; }
     </style>
-    """,
-    unsafe_allow_html=True,
+    """, unsafe_allow_html=True,
 )
 
-if "current_session_id" not in st.session_state:
-    st.session_state.current_session_id = None
-if "flashcards" not in st.session_state:
-    st.session_state.flashcards = None
-if "quiz_data" not in st.session_state:
-    st.session_state.quiz_data = None
-if "selected_answers" not in st.session_state:
-    st.session_state.selected_answers = {}
-if "quiz_submitted" not in st.session_state:
-    st.session_state.quiz_submitted = False
-if "active_content_name" not in st.session_state:
-    st.session_state.active_content_name = "Genel İçerik"
+# State Başlatma
+defaults = {
+    "current_session_id": None, "flashcards": None, "quiz_data": None,
+    "selected_answers": {}, "quiz_submitted": False, "active_content_name": "Genel İçerik"
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 with st.sidebar:
     if HAS_CUSTOM_LOGO:
         st.image(LOGO_PATH, use_container_width=True)
     else:
-        st.markdown(
-            """
-            <div style='text-align:center; padding:10px; background:#ffeef2; border-radius:12px; color:#ff85a1; font-weight:900; font-size:24px; letter-spacing:-1px;'>
-                PAWCAP AI
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='text-align:center; padding:10px; background:#ffeef2; border-radius:12px; color:#ff85a1; font-weight:900; font-size:24px;'>PAWCAP AI</div>", unsafe_allow_html=True)
 
     st.write("---")
-
     st.markdown("### 🏆 Başarı Rozetlerin")
     badges = get_my_badges()
     if not badges:
@@ -79,37 +62,12 @@ with st.sidebar:
     else:
         cols = st.columns(3)
         for i, b in enumerate(badges):
-            cols[i % 3].markdown(
-                f"<div class='badge-box' title='{b.badge_name}'>{b.badge_icon}</div>",
-                unsafe_allow_html=True,
-            )
-
-    st.write("---")
-
-    st.markdown("### ⏱️ Pomodoro Odak Modu")
-    if "pomo_time" not in st.session_state:
-        st.session_state.pomo_time = 25 * 60
-    if "pomo_running" not in st.session_state:
-        st.session_state.pomo_running = False
-
-    mins, secs = divmod(st.session_state.pomo_time, 60)
-    st.markdown(
-        f"<h1 style='text-align:center; color:#ff6b8b;'>{mins:02d}:{secs:02d}</h1>",
-        unsafe_allow_html=True,
-    )
-
-    col_p1, col_p2 = st.columns(2)
-    if col_p1.button("▶️ Başlat"):
-        st.session_state.pomo_running = True
-    if col_p2.button("⏹️ Sıfırla"):
-        st.session_state.pomo_running = False
-        st.session_state.pomo_time = 25 * 60
+            cols[i % 3].markdown(f"<div class='badge-box' title='{b.badge_name}'>{b.badge_icon}</div>", unsafe_allow_html=True)
 
     st.write("---")
     if st.button("➕ Yeni Sohbet Başlat", use_container_width=True):
         st.session_state.current_session_id = create_new_chat_session()
-        st.session_state.flashcards = None
-        st.session_state.quiz_data = None
+        for key in ["flashcards", "quiz_data"]: st.session_state[key] = None
         st.session_state.selected_answers = {}
         st.session_state.quiz_submitted = False
         st.rerun()
@@ -123,26 +81,20 @@ with st.sidebar:
         for s in sessions:
             if st.button(f"📄 {s.title}", key=f"sess_{s.id}", use_container_width=True):
                 st.session_state.current_session_id = s.id
-                st.session_state.flashcards = None
-                st.session_state.quiz_data = None
+                for key in ["flashcards", "quiz_data"]: st.session_state[key] = None
                 st.session_state.selected_answers = {}
                 st.session_state.quiz_submitted = False
                 st.rerun()
 
 if not st.session_state.current_session_id:
     st.markdown(
-        """
-        <div style='text-align:center; padding-top:80px;'>
-            <h1 style='color:#ff85a1; font-size:45px;'>PawCap AI Asistanına Hoş Geldin</h1>
-            <p style='color:#8a606d; font-size:18px;'>Sol menüden yeni bir sohbet başlatarak ders notlarını yükleyebilir ve analize başlayabilirsin.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+        """<div style='text-align:center; padding-top:80px;'>
+        <h1 style='color:#ff85a1; font-size:45px;'>PawCap AI Asistanına Hoş Geldin</h1>
+        <p style='color:#8a606d; font-size:18px;'>Sol menüden yeni bir sohbet başlatarak ders notlarını yükleyebilir ve analize başlayabilirsin.</p>
+        </div>""", unsafe_allow_html=True,
     )
 else:
-    active_session = next(
-        (s for s in sessions if s.id == st.session_state.current_session_id), None
-    )
+    active_session = next((s for s in sessions if s.id == st.session_state.current_session_id), None)
     session_title = active_session.title if active_session else "Sohbet Odası"
 
     st.subheader(f"💬 {session_title}")
@@ -176,100 +128,69 @@ else:
             if not active_f and not safe_text:
                 warning_msg = "⚠️ Analiz yapabilmem için yukarıdaki kutudan bir dosya yüklemeli veya metin yapıştırmalısın!"
                 st.write(warning_msg)
-                save_chat_message(
-                    st.session_state.current_session_id, "assistant", warning_msg
-                )
+                save_chat_message(st.session_state.current_session_id, "assistant", warning_msg)
             else:
-                if "özet" in prompt.lower():
-                    with st.spinner("İçerik analiz edilip özetleniyor..."):
-                        try:
-                            res = generate_summary(
-                                text_content=safe_text, file_path=active_f
-                            )
+                try:
+                    if "özet" in prompt.lower():
+                        with st.spinner("İçerik analiz edilip özetleniyor..."):
+                            res = generate_summary(text_content=safe_text, file_path=active_f)
                             st.markdown(res)
-                            save_chat_message(
-                                st.session_state.current_session_id, "assistant", res
-                            )
+                            save_chat_message(st.session_state.current_session_id, "assistant", res)
                             earn_badge("Özet Ustası", "📝")
-                            st.session_state.flashcards = None
-                            st.session_state.quiz_data = None
-                        except Exception as e:
-                            st.error("Sunucu yanıt vermedi, lütfen tekrar dene.")
-                elif "quiz" in prompt.lower() or "test" in prompt.lower():
-                    with st.spinner("İnteraktif sorular hazırlanıyor..."):
-                        try:
-                            st.session_state.quiz_data = generate_structured_quiz(
-                                text_content=safe_text, file_path=active_f
-                            )
-                            st.session_state.selected_answers = {}
-                            st.session_state.quiz_submitted = False
-                            st.session_state.flashcards = None
+                            st.session_state.flashcards, st.session_state.quiz_data = None, None
+
+                    elif "quiz" in prompt.lower() or "test" in prompt.lower():
+                        with st.spinner("İnteraktif sorular hazırlanıyor..."):
+                            st.session_state.quiz_data = generate_structured_quiz(text_content=safe_text, file_path=active_f)
+                            st.session_state.selected_answers, st.session_state.quiz_submitted, st.session_state.flashcards = {}, False, None
                             resp_msg = "🎯 Sınav hazırlandı! Hemen aşağıdan şıkları işaretleyebilirsin."
                             st.write(resp_msg)
-                            save_chat_message(
-                                st.session_state.current_session_id,
-                                "assistant",
-                                resp_msg,
-                            )
+                            save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Sınav Avcısı", "🎯")
-                        except Exception as e:
-                            st.error("Sınav hazırlanırken bir sunucu hatası oluştu.")
-                elif "flashcard" in prompt.lower() or "kart" in prompt.lower():
-                    with st.spinner("Ezber kartları derleniyor..."):
-                        try:
-                            st.session_state.flashcards = generate_flashcards(
-                                text_content=safe_text, file_path=active_f
-                            )
+
+                    elif "flashcard" in prompt.lower() or "kart" in prompt.lower():
+                        with st.spinner("Ezber kartları derleniyor..."):
+                            st.session_state.flashcards = generate_flashcards(text_content=safe_text, file_path=active_f)
                             st.session_state.quiz_data = None
                             resp_msg = "🃏 Senin için önemli kavramlardan ezber kartları oluşturdum! Aşağıdan çalışabilirsin."
                             st.write(resp_msg)
-                            save_chat_message(
-                                st.session_state.current_session_id,
-                                "assistant",
-                                resp_msg,
-                            )
+                            save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Hafıza Şampiyonu", "🧠")
-                        except Exception as e:
-                            st.error("Kartlar oluşturulamadı, sunucu yoğun olabilir.")
-                else:
-                    resp = "Harika! İçeriği aldım. Şimdi benden 'Özet', 'Quiz' veya 'Flashcard' hazırlamamı isteyebilirsin."
-                    st.write(resp)
-                    save_chat_message(
-                        st.session_state.current_session_id, "assistant", resp
-                    )
+                    else:
+                        resp = "Harika! İçeriği aldım. Şimdi benden 'Özet', 'Quiz' veya 'Flashcard' hazırlamamı isteyebilirsin."
+                        st.write(resp)
+                        save_chat_message(st.session_state.current_session_id, "assistant", resp)
+                
+                except Exception as e:
+                    st.error(f"İşlem sırasında bir hata oluştu: {str(e)}")
+                
+                finally:
+                    # İşlem bitince yüklenen dosyayı klasörden sil (Sunucu şişmesin)
+                    if active_f and os.path.exists(active_f):
+                        os.remove(active_f)
 
+    # --- Flashcard Render ---
     if st.session_state.flashcards:
         st.write("---")
         st.markdown("### 🃏 Flashcard Çalışma Modu")
         cards = st.session_state.flashcards["cards"]
-        if "card_idx" not in st.session_state:
-            st.session_state.card_idx = 0
-        if "flipped" not in st.session_state:
-            st.session_state.flipped = False
+        if "card_idx" not in st.session_state: st.session_state.card_idx = 0
+        if "flipped" not in st.session_state: st.session_state.flipped = False
 
         curr = cards[st.session_state.card_idx]
-        card_content = (
-            f"<b>CEVAP:</b><br>{curr['back']}"
-            if st.session_state.flipped
-            else f"<b>KAVRAM / SORU:</b><br>{curr['front']}"
-        )
-
-        st.markdown(
-            f"<div class='flashcard'>{card_content}</div>", unsafe_allow_html=True
-        )
+        card_content = f"<b>CEVAP:</b><br>{curr['back']}" if st.session_state.flipped else f"<b>KAVRAM / SORU:</b><br>{curr['front']}"
+        st.markdown(f"<div class='flashcard'>{card_content}</div>", unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         if c1.button("🔙 Önceki Kart"):
             st.session_state.card_idx = max(0, st.session_state.card_idx - 1)
-            st.session_state.flipped = False
+            st.session_state.flipped, st.session_state.flashcards = False, st.session_state.flashcards 
             st.rerun()
         if c2.button("🔄 Kartı Çevir"):
             st.session_state.flipped = not st.session_state.flipped
             st.rerun()
         if c3.button("Sonraki Kart 🔜"):
-            st.session_state.card_idx = min(
-                len(cards) - 1, st.session_state.card_idx + 1
-            )
+            st.session_state.card_idx = min(len(cards) - 1, st.session_state.card_idx + 1)
             st.session_state.flipped = False
             st.rerun()
 
@@ -277,21 +198,12 @@ else:
         st.write("---")
         with st.markdown('<div class="premium-card">', unsafe_allow_html=True):
             st.markdown("### 📝 Kendini Test Et")
-
             questions = st.session_state.quiz_data.get("questions", [])
 
             for idx, q_data in enumerate(questions):
                 st.markdown(f"#### Soru {idx + 1}: {q_data['question_text']}")
-                cevap = st.radio(
-                    "Şıklar:",
-                    q_data["options"],
-                    key=f"q_main_{idx}",
-                    index=None,
-                    disabled=st.session_state.quiz_submitted,
-                )
-                if cevap:
-                    st.session_state.selected_answers[idx] = cevap
-
+                cevap = st.radio("Şıklar:", q_data["options"], key=f"q_main_{idx}", index=None, disabled=st.session_state.quiz_submitted)
+                if cevap: st.session_state.selected_answers[idx] = cevap
             st.write("")
 
             if not st.session_state.quiz_submitted:
@@ -302,14 +214,11 @@ else:
             if st.session_state.quiz_submitted:
                 st.write("---")
                 st.markdown("### 🏆 Sınav Sonucu ve Analiz")
-
-                dogru_sayisi = 0
-                toplam_soru = len(questions)
+                dogru_sayisi, toplam_soru = 0, len(questions)
 
                 for idx, q_data in enumerate(questions):
                     kullanici_cevabi = st.session_state.selected_answers.get(idx, "")
                     dogru_cevap = q_data["correct_answer"]
-
                     with st.expander(f"Soru {idx + 1} Analizi", expanded=True):
                         st.write(f"**Senin Cevabın:** `{kullanici_cevabi}`")
                         if kullanici_cevabi == dogru_cevap:
@@ -319,29 +228,12 @@ else:
                             st.error(f"❌ Yanlış. Doğru Cevap: `{dogru_cevap}`")
                         st.info(f"💡 **Açıklama:** {q_data['explanation']}")
 
-                basari_yuzdesi = int((dogru_sayisi / toplam_soru) * 100)
-                st.metric(
-                    label="Başarı Puanın",
-                    value=f"{dogru_sayisi} / {toplam_soru}",
-                    delta=f"%{basari_yuzdesi}",
-                )
-
-                save_quiz_score(
-                    st.session_state.active_content_name, dogru_sayisi, toplam_soru
-                )
-                st.caption(
-                    "📌 *Bu sonuç gelişim takibin için veritabanına kaydedildi.*"
-                )
+                basari_yuzdesi = int((dogru_sayisi / toplam_soru) * 100) if toplam_soru > 0 else 0
+                st.metric(label="Başarı Puanın", value=f"{dogru_sayisi} / {toplam_soru}", delta=f"%{basari_yuzdesi}")
+                save_quiz_score(st.session_state.active_content_name, dogru_sayisi, toplam_soru)
+                st.caption("📌 *Bu sonuç gelişim takibin için veritabanına kaydedildi.*")
 
                 if st.button("Sohbete Geri Dön (Quiz'i Kapat)", key="btn_close_main"):
-                    st.session_state.quiz_data = None
-                    st.session_state.selected_answers = {}
-                    st.session_state.quiz_submitted = False
+                    st.session_state.quiz_data, st.session_state.selected_answers, st.session_state.quiz_submitted = None, {}, False
                     st.rerun()
-
         st.markdown("</div>", unsafe_allow_html=True)
-
-if st.session_state.pomo_running and st.session_state.pomo_time > 0:
-    time.sleep(1)
-    st.session_state.pomo_time -= 1
-    st.rerun()
