@@ -41,17 +41,18 @@ st.markdown(
     """, unsafe_allow_html=True,
 )
 
-# --- VERİTABANINDAN PLANLARI YÜKLEME ---
+# --- VERİTABANINDAN PLANLARI YÜKLEME (None'lar temizleniyor) ---
 if "planner_loaded" not in st.session_state:
     todo_json = get_setting("todo_list")
     if todo_json:
-        st.session_state.todo_list = pd.DataFrame(json.loads(todo_json))
+        # fillna("") ile önceden kaydedilmiş None'ları temizliyoruz
+        st.session_state.todo_list = pd.DataFrame(json.loads(todo_json)).fillna("")
     else:
         st.session_state.todo_list = pd.DataFrame([{"Durum": False, "Görev": "Yeni görev ekle..."}])
 
     time_json = get_setting("time_blocks")
     if time_json:
-        st.session_state.time_blocks = pd.DataFrame(json.loads(time_json))
+        st.session_state.time_blocks = pd.DataFrame(json.loads(time_json)).fillna("")
     else:
         st.session_state.time_blocks = pd.DataFrame([{"Saat": "09:00", "Aktivite": "Çalışmaya başla"}])
     
@@ -83,24 +84,31 @@ with st.sidebar:
         edited_todo = st.data_editor(
             st.session_state.todo_list, 
             num_rows="dynamic", 
-            use_container_width=True
+            use_container_width=True,
+            # Yeni eklenen satırlar için varsayılan değerleri boşluk "" yaptık
+            column_config={
+                "Durum": st.column_config.CheckboxColumn("Durum", default=False),
+                "Görev": st.column_config.TextColumn("Görev", default="")
+            }
         )
-        # Eğer tabloda değişiklik yapıldıysa veritabanına kaydet
         if not edited_todo.equals(st.session_state.todo_list):
-            st.session_state.todo_list = edited_todo
-            save_setting("todo_list", edited_todo.to_json(orient="records"))
+            st.session_state.todo_list = edited_todo.fillna("")
+            save_setting("todo_list", st.session_state.todo_list.to_json(orient="records"))
         
     with tab_time:
         st.caption("Saat aralıklarını ve planını yaz:")
         edited_time = st.data_editor(
             st.session_state.time_blocks, 
             num_rows="dynamic", 
-            use_container_width=True
+            use_container_width=True,
+            column_config={
+                "Saat": st.column_config.TextColumn("Saat", default=""),
+                "Aktivite": st.column_config.TextColumn("Aktivite", default="")
+            }
         )
-        # Eğer tabloda değişiklik yapıldıysa veritabanına kaydet
         if not edited_time.equals(st.session_state.time_blocks):
-            st.session_state.time_blocks = edited_time
-            save_setting("time_blocks", edited_time.to_json(orient="records"))
+            st.session_state.time_blocks = edited_time.fillna("")
+            save_setting("time_blocks", st.session_state.time_blocks.to_json(orient="records"))
 
     st.write("---")
     
@@ -169,18 +177,15 @@ else:
 
     st.subheader(f"💬 {session_title}")
 
-    # Sohbet Geçmişini Render Et
     messages = get_messages_for_session(st.session_state.current_session_id)
     for msg in messages:
         avatar_img = ASSISTANT_AVATAR if msg.role == "assistant" else "user"
         with st.chat_message(msg.role, avatar=avatar_img):
             st.markdown(msg.content)
 
-    # Sohbet Girdisi (Prompt)
     if prompt := st.chat_input("Bana bir görev ver veya sohbet et..."):
         save_chat_message(st.session_state.current_session_id, "user", prompt)
         
-        # Sohbet başlığını kullanıcının ilk mesajıyla güncelle
         update_chat_session_title(st.session_state.current_session_id, prompt)
 
         with st.chat_message("user", avatar="user"):
@@ -193,7 +198,6 @@ else:
             p_lower = prompt.lower()
             
             try:
-                # 1. ÖZET İSTEĞİ
                 if "özet" in p_lower or "kısaca" in p_lower:
                     if not active_f and not safe_text:
                         warning_msg = "⚠️ Özet çıkarmam için sol menüden bir dosya yüklemeli veya metin yapıştırmalısın!"
@@ -214,7 +218,6 @@ else:
                             )
                             st.session_state.flashcards, st.session_state.quiz_data = None, None
 
-                # 2. QUİZ İSTEĞİ
                 elif "quiz" in p_lower or "test" in p_lower or "soru" in p_lower:
                     if not active_f and not safe_text:
                         warning_msg = "⚠️ Soru hazırlayabilmem için sol menüden bir not veya dosya eklemelisin!"
@@ -229,7 +232,6 @@ else:
                             save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Sınav Avcısı", "🎯")
 
-                # 3. FLASHCARD İSTEĞİ
                 elif "flashcard" in p_lower or "kart" in p_lower:
                     if not active_f and not safe_text:
                         warning_msg = "⚠️ Kart hazırlayabilmem için sol menüden içeriği eklemelisin!"
@@ -244,7 +246,6 @@ else:
                             save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Hafıza Şampiyonu", "🧠")
                             
-                # 4. NORMAL SOHBET
                 else:
                     with st.spinner("PawCap düşünüyor..."):
                         res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f)
@@ -259,7 +260,6 @@ else:
                     os.remove(active_f)
                     st.session_state.temp_file_path = None
 
-    # --- Flashcard & Quiz Modülleri ---
     if st.session_state.flashcards:
         with st.markdown('<div class="premium-card">', unsafe_allow_html=True):
             st.markdown("### 🃏 Flashcard Çalışma Modu")
