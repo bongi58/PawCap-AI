@@ -1,15 +1,16 @@
 import os
 import time
+import json
 import pandas as pd
 import streamlit as st
 from ai_helper import generate_structured_quiz, generate_summary, generate_flashcards, process_content
 from database import (
     init_db, save_quiz_score, create_new_chat_session,
     get_all_chat_sessions, get_messages_for_session, save_chat_message,
-    earn_badge, get_my_badges, get_all_quiz_scores, update_chat_session_title
+    earn_badge, get_my_badges, get_all_quiz_scores, update_chat_session_title,
+    save_setting, get_setting
 )
 
-# Veritabanını başlat
 init_db()
 
 TEMP_DIR = "temp_uploads"
@@ -40,13 +41,26 @@ st.markdown(
     """, unsafe_allow_html=True,
 )
 
-# State Başlatma (Planlayıcı verileri eklendi)
+# --- VERİTABANINDAN PLANLARI YÜKLEME ---
+if "planner_loaded" not in st.session_state:
+    todo_json = get_setting("todo_list")
+    if todo_json:
+        st.session_state.todo_list = pd.DataFrame(json.loads(todo_json))
+    else:
+        st.session_state.todo_list = pd.DataFrame([{"Durum": False, "Görev": "Yeni görev ekle..."}])
+
+    time_json = get_setting("time_blocks")
+    if time_json:
+        st.session_state.time_blocks = pd.DataFrame(json.loads(time_json))
+    else:
+        st.session_state.time_blocks = pd.DataFrame([{"Saat": "09:00", "Aktivite": "Çalışmaya başla"}])
+    
+    st.session_state.planner_loaded = True
+
 defaults = {
     "current_session_id": None, "flashcards": None, "quiz_data": None,
     "selected_answers": {}, "quiz_submitted": False, "active_content_name": "Genel İçerik",
-    "temp_text_input": "", "temp_file_path": None,
-    "todo_list": pd.DataFrame([{"Durum": False, "Görev": "DGS Denemesi Çöz"}]),
-    "time_blocks": pd.DataFrame([{"Saat": "09:00-11:00", "Aktivite": "Python Çalış"}])
+    "temp_text_input": "", "temp_file_path": None
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -61,25 +75,32 @@ with st.sidebar:
 
     st.write("---")
     
-    # YENİ ÖZELLİK: GÜNLÜK PLANLAYICI
     st.markdown("### 📅 Günlük Planlayıcı")
     tab_todo, tab_time = st.tabs(["✅ To-Do", "⏳ Çizelge"])
     
     with tab_todo:
-        st.caption("Görevi silmek için solundaki numarayı seçip klavyenden 'Delete' tuşuna basabilirsin:")
-        st.session_state.todo_list = st.data_editor(
+        st.caption("Görevi silmek için solundaki numarayı seçip 'Delete' tuşuna bas:")
+        edited_todo = st.data_editor(
             st.session_state.todo_list, 
             num_rows="dynamic", 
             use_container_width=True
         )
+        # Eğer tabloda değişiklik yapıldıysa veritabanına kaydet
+        if not edited_todo.equals(st.session_state.todo_list):
+            st.session_state.todo_list = edited_todo
+            save_setting("todo_list", edited_todo.to_json(orient="records"))
         
     with tab_time:
-        st.caption("Saat aralıklarını ve planını yaz (Silmek için numarayı seçip Delete'e bas):")
-        st.session_state.time_blocks = st.data_editor(
+        st.caption("Saat aralıklarını ve planını yaz:")
+        edited_time = st.data_editor(
             st.session_state.time_blocks, 
             num_rows="dynamic", 
             use_container_width=True
         )
+        # Eğer tabloda değişiklik yapıldıysa veritabanına kaydet
+        if not edited_time.equals(st.session_state.time_blocks):
+            st.session_state.time_blocks = edited_time
+            save_setting("time_blocks", edited_time.to_json(orient="records"))
 
     st.write("---")
     
@@ -223,7 +244,7 @@ else:
                             save_chat_message(st.session_state.current_session_id, "assistant", resp_msg)
                             earn_badge("Hafıza Şampiyonu", "🧠")
                             
-                # 4. NORMAL SOHBET (Yapay Zeka Devrede!)
+                # 4. NORMAL SOHBET
                 else:
                     with st.spinner("PawCap düşünüyor..."):
                         res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f)

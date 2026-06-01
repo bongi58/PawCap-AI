@@ -44,6 +44,13 @@ class QuizScore(Base):
     total_questions = Column(Integer)
     created_at = Column(DateTime, server_default=func.now())
 
+# YENİ: Planlayıcı verilerini tutacak ayarlar tablosu
+class UserSetting(Base):
+    __tablename__ = "user_settings"
+    id = Column(Integer, primary_key=True, index=True)
+    setting_key = Column(String, unique=True, index=True)
+    setting_value = Column(Text)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
@@ -54,6 +61,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# --- YENİ VERİTABANI FONKSİYONLARI ---
+def save_setting(key, value):
+    with get_db() as db:
+        setting = db.query(UserSetting).filter(UserSetting.setting_key == key).first()
+        if setting:
+            setting.setting_value = value
+        else:
+            new_setting = UserSetting(setting_key=key, setting_value=value)
+            db.add(new_setting)
+        db.commit()
+
+def get_setting(key):
+    with get_db() as db:
+        setting = db.query(UserSetting).filter(UserSetting.setting_key == key).first()
+        return setting.setting_value if setting else None
+# ------------------------------------
 
 def create_new_chat_session(title="Yeni Sohbet"):
     with get_db() as db:
@@ -97,15 +121,13 @@ def save_quiz_score(topic, score, total_questions):
         db.add(new_score)
         db.commit()
 
-def get_all_quiz_scores():
-    with get_db() as db:
-        return db.query(QuizScore).order_by(QuizScore.created_at.asc()).all()
-   
 def update_chat_session_title(session_id, new_title):
     with get_db() as db:
         session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-        # Sadece başlık "Yeni Sohbet" ise güncelle (yani ilk mesajda)
         if session and session.title == "Yeni Sohbet":
-            # Başlık çok uzun olmasın diye ilk 30 karakterini alıp sonuna ... koyuyoruz
             session.title = (new_title[:30] + "...") if len(new_title) > 30 else new_title
             db.commit()
+
+def get_all_quiz_scores():
+    with get_db() as db:
+        return db.query(QuizScore).order_by(QuizScore.created_at.asc()).all()
