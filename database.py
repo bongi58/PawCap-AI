@@ -5,7 +5,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from contextlib import contextmanager
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./pawcap.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./pawcap_v2.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
