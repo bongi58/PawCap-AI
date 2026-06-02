@@ -10,6 +10,9 @@ from database import (
     save_setting, get_setting, register_user, login_user
 )
 
+if os.path.exists("pawcap.db"):
+    os.remove("pawcap.db")
+
 init_db()
 
 TEMP_DIR = "temp_uploads"
