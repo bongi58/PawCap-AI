@@ -35,6 +35,18 @@ class Flashcard(BaseModel):
 class FlashcardSchema(BaseModel):
     cards: list[Flashcard]
 
+# --- YENİ: YAPAY ZEKANIN FORMAT HATALARINI TEMİZLEYEN FONKSİYON ---
+def clean_json(raw_str):
+    if not raw_str: return ""
+    raw_str = raw_str.strip()
+    if raw_str.startswith("```json"):
+        raw_str = raw_str[7:]
+    elif raw_str.startswith("```"):
+        raw_str = raw_str[3:]
+    if raw_str.endswith("```"):
+        raw_str = raw_str[:-3]
+    return raw_str.strip()
+
 def process_content(prompt_text, text_content=None, file_path=None, config=None):
     contents = []
     uploaded_file = None
@@ -60,8 +72,8 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None)
             temperature=0.7 
         )
 
-    # --- YENİ: Akıllı Yeniden Deneme (Retry) Mantığı ---
-    max_retries = 3
+    # --- DAHA SABIRLI YENİDEN DENEME (5 Kez, 4 Saniye) ---
+    max_retries = 5
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
@@ -76,30 +88,22 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None)
             return response.text if response.text else ""
             
         except Exception as e:
-            error_msg = str(e).lower()
-            # Eğer hata sunucu yoğunluğu (503) ise ve henüz 3 deneme hakkımız bitmediyse:
-            if "503" in error_msg or "unavailable" in error_msg or "429" in error_msg or "exhausted" in error_msg:
-                if attempt < max_retries - 1:
-                    time.sleep(3) # 3 saniye bekle ve çaktırmadan tekrar dene
-                    continue
+            if attempt < max_retries - 1:
+                time.sleep(4) 
+                continue
             
-            # Eğer başka bir hataysa veya 3 deneme de başarısız olduysa dosyayı sil ve hatayı göster
             if uploaded_file:
-                try:
-                    client.files.delete(name=uploaded_file.name)
-                except:
-                    pass
+                try: client.files.delete(name=uploaded_file.name)
+                except: pass
             raise e
 
 def generate_summary(text_content=None, file_path=None):
     prompt = "Eklenen ders içeriğini öğrenci dostu ve akılda kalıcı bir şekilde özetle. LÜTFEN ÖZETİ KESİNLİKLE TÜRKÇE (TURKISH) OLARAK YAZ. Kaynak metin İngilizce olsa bile çevirip Türkçe özetle."
     try:
         res = process_content(prompt, text_content, file_path)
-        return res if res.strip() else "⚠️ İçerik güvenlik filtrelerine takılmış veya okunamamış olabilir. Lütfen içeriği küçültüp tekrar deneyin."
+        return res if res.strip() else "⚠️ İçerik okunamadı. Lütfen içeriği küçültüp tekrar deneyin."
     except Exception as e:
-        if "503" in str(e):
-            return "⚠️ Şu an Google sunucuları aşırı yoğun. Lütfen 1-2 dakika sonra tekrar dene."
-        raise e
+        return "⚠️ Google sunucuları aşırı yoğun. PawCap çok uğraştı ama bağlanamadı, lütfen 1 dakika sonra tekrar dene."
 
 def generate_structured_quiz(text_content=None, file_path=None):
     prompt = "Eklenen ders içeriğini analiz et ve öğrenciyi test etmek için 3 soruluk quiz hazırla. Tüm içerik KESİNLİKLE TÜRKÇE olmalıdır."
@@ -111,10 +115,10 @@ def generate_structured_quiz(text_content=None, file_path=None):
     )
     try:
         raw_json = process_content(prompt, text_content, file_path, config=quiz_config)
-        return json.loads(raw_json) if raw_json else None
+        cleaned = clean_json(raw_json)
+        return json.loads(cleaned) if cleaned else None
     except Exception as e:
-        if "503" in str(e) or "UNAVAILABLE" in str(e):
-            st.error("⚠️ Şu an Google sunucuları aşırı yoğun. Quiz hazırlanamadı, lütfen birazdan tekrar dene.")
+        st.error("⚠️ Google sunucuları yoğun veya içerik okunamadı. Lütfen tekrar dene.")
         return None
 
 def generate_flashcards(text_content=None, file_path=None):
@@ -127,8 +131,8 @@ def generate_flashcards(text_content=None, file_path=None):
     )
     try:
         raw_json = process_content(prompt, text_content, file_path, config=flashcard_config)
-        return json.loads(raw_json) if raw_json else None
+        cleaned = clean_json(raw_json)
+        return json.loads(cleaned) if cleaned else None
     except Exception as e:
-        if "503" in str(e) or "UNAVAILABLE" in str(e):
-            st.error("⚠️ Şu an Google sunucuları aşırı yoğun. Kartlar hazırlanamadı, lütfen birazdan tekrar dene.")
+        st.error("⚠️ Google sunucuları yoğun veya içerik okunamadı. Lütfen tekrar dene.")
         return None

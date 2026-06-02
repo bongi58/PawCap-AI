@@ -10,9 +10,7 @@ from database import (
     save_setting, get_setting, register_user, login_user
 )
 
-if os.path.exists("pawcap.db"):
-    os.remove("pawcap.db")
-
+# Veritabanını başlat (Silme kodu KALDIRILDI!)
 init_db()
 
 TEMP_DIR = "temp_uploads"
@@ -80,7 +78,7 @@ if st.session_state.logged_in_user_id is None:
                         st.error(msg)
                 else:
                     st.warning("Lütfen bilgileri eksiksiz doldurun (Şifre min. 4 karakter).")
-    st.stop() # Kullanıcı giriş yapmadıysa kodun geri kalanını çalıştırma
+    st.stop() 
 
 # ==========================================
 # ANA UYGULAMA (Sadece Giriş Yapanlar İçin)
@@ -89,7 +87,6 @@ user_id = st.session_state.logged_in_user_id
 
 # Verileri Yükle
 if "planner_loaded" not in st.session_state:
-    # Modern To-Do Listesi formatı
     todo_json = get_setting(user_id, "todo_list")
     st.session_state.todos = json.loads(todo_json) if todo_json else [{"id": 1, "task": "DGS Denemesi Çöz", "done": False}]
     st.session_state.planner_loaded = True
@@ -115,13 +112,10 @@ with st.sidebar:
 
     st.write("---")
     
-    # YENİ TASARIM MODERN TO-DO LİSTESİ
     st.markdown("### ✅ Günlük Görevler")
     
-    # Mevcut görevleri listele
     for i, todo in enumerate(st.session_state.todos):
         col1, col2, col3 = st.columns([1, 6, 1])
-        # Checkbox değeri değiştiğinde anında kaydet
         is_done = col1.checkbox("", value=todo["done"], key=f"chk_{todo['id']}")
         if is_done != todo["done"]:
             st.session_state.todos[i]["done"] = is_done
@@ -131,13 +125,11 @@ with st.sidebar:
         task_text = f"~~{todo['task']}~~" if is_done else todo['task']
         col2.markdown(task_text)
         
-        # Silme Butonu
         if col3.button("🗑️", key=f"del_{todo['id']}", help="Sil"):
             st.session_state.todos.pop(i)
             save_todos()
             st.rerun()
             
-    # Yeni görev ekleme
     new_task = st.text_input("Yeni Görev", placeholder="Ne yapacaksın?", label_visibility="collapsed")
     if st.button("➕ Ekle", use_container_width=True) and new_task:
         new_id = max([t["id"] for t in st.session_state.todos] + [0]) + 1
@@ -275,27 +267,39 @@ else:
                     os.remove(active_f)
                     st.session_state.temp_file_path = None
 
+    # --- Flashcard & Quiz Modülleri (KOPYALAR TEMİZLENDİ) ---
     if st.session_state.flashcards:
-        with st.markdown('<div class="premium-card">', unsafe_allow_html=True):
+        with st.container(border=True):
             st.markdown("### 🃏 Flashcard Çalışma Modu")
             cards = st.session_state.flashcards["cards"]
             if "card_idx" not in st.session_state: st.session_state.card_idx = 0
             if "flipped" not in st.session_state: st.session_state.flipped = False
 
             curr = cards[st.session_state.card_idx]
-            card_content = f"<b>CEVAP:</b><br>{curr['back']}" if st.session_state.flipped else f"<b>KAVRAM / SORU:</b><br>{curr['front']}"
-            st.markdown(f"<div class='flashcard'>{card_content}</div>", unsafe_allow_html=True)
+            
+            if st.session_state.flipped:
+                st.success(f"**CEVAP:**\n\n{curr['back']}", icon="💡")
+            else:
+                st.info(f"**KAVRAM / SORU:**\n\n{curr['front']}", icon="❓")
 
             c1, c2, c3 = st.columns(3)
-            if c1.button("🔙 Önceki"): st.session_state.card_idx = max(0, st.session_state.card_idx - 1); st.session_state.flipped = False; st.rerun()
-            if c2.button("🔄 Çevir"): st.session_state.flipped = not st.session_state.flipped; st.rerun()
-            if c3.button("Sonraki 🔜"): st.session_state.card_idx = min(len(cards) - 1, st.session_state.card_idx + 1); st.session_state.flipped = False; st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+            if c1.button("🔙 Önceki", use_container_width=True):
+                st.session_state.card_idx = max(0, st.session_state.card_idx - 1)
+                st.session_state.flipped = False
+                st.rerun()
+            if c2.button("🔄 Çevir", use_container_width=True):
+                st.session_state.flipped = not st.session_state.flipped
+                st.rerun()
+            if c3.button("Sonraki 🔜", use_container_width=True):
+                st.session_state.card_idx = min(len(cards) - 1, st.session_state.card_idx + 1)
+                st.session_state.flipped = False
+                st.rerun()
 
     if st.session_state.quiz_data:
-        with st.markdown('<div class="premium-card">', unsafe_allow_html=True):
+        with st.container(border=True):
             st.markdown("### 📝 Kendini Test Et")
             questions = st.session_state.quiz_data.get("questions", [])
+
             for idx, q_data in enumerate(questions):
                 st.markdown(f"#### Soru {idx + 1}: {q_data['question_text']}")
                 cevap = st.radio("Şıklar:", q_data["options"], key=f"q_main_{idx}", index=None, disabled=st.session_state.quiz_submitted)
@@ -303,22 +307,30 @@ else:
             
             if not st.session_state.quiz_submitted:
                 st.write("")
-                if st.button("✅ Quizi Bitir ve Puanla", key="btn_finish_main"): st.session_state.quiz_submitted = True; st.rerun()
+                if st.button("✅ Quizi Bitir ve Puanla", key="btn_finish_main"):
+                    st.session_state.quiz_submitted = True
+                    st.rerun()
 
             if st.session_state.quiz_submitted:
                 st.write("---")
                 dogru_sayisi, toplam_soru = 0, len(questions)
+
                 for idx, q_data in enumerate(questions):
                     kullanici_cevabi = st.session_state.selected_answers.get(idx, "")
                     dogru_cevap = q_data["correct_answer"]
                     with st.expander(f"Soru {idx + 1} Analizi", expanded=True):
                         st.write(f"**Senin Cevabın:** `{kullanici_cevabi}`")
-                        if kullanici_cevabi == dogru_cevap: st.success("✅ Doğru!"); dogru_sayisi += 1
-                        else: st.error(f"❌ Yanlış. Doğru Cevap: `{dogru_cevap}`")
+                        if kullanici_cevabi == dogru_cevap:
+                            st.success("✅ Doğru!")
+                            dogru_sayisi += 1
+                        else:
+                            st.error(f"❌ Yanlış. Doğru Cevap: `{dogru_cevap}`")
                         st.info(f"💡 **Açıklama:** {q_data['explanation']}")
 
-                st.metric(label="Başarı Puanın", value=f"{dogru_sayisi} / {toplam_soru}", delta=f"%{int((dogru_sayisi/toplam_soru)*100) if toplam_soru > 0 else 0}")
+                basari_yuzdesi = int((dogru_sayisi / toplam_soru) * 100) if toplam_soru > 0 else 0
+                st.metric(label="Başarı Puanın", value=f"{dogru_sayisi} / {toplam_soru}", delta=f"%{basari_yuzdesi}")
                 save_quiz_score(user_id, st.session_state.active_content_name, dogru_sayisi, toplam_soru)
 
-                if st.button("Kapat"): st.session_state.quiz_data, st.session_state.selected_answers, st.session_state.quiz_submitted = None, {}, False; st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+                if st.button("Kapat", key="btn_close_main"):
+                    st.session_state.quiz_data, st.session_state.selected_answers, st.session_state.quiz_submitted = None, {}, False
+                    st.rerun()
