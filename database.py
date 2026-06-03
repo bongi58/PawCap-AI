@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import hashlib
 from sqlalchemy import Column, DateTime, Integer, String, Text, ForeignKey, create_engine
@@ -5,8 +6,17 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from contextlib import contextmanager
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./pawcap_v2.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# --- 1. GÜÇLENDİRİLMİŞ VERİTABANI BAĞLANTISI ---
+# Dosya yolunu mutlak (absolute) hale getiriyoruz ki sunucu klasörü kaybetmesin.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "pawcap_v3.db")
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
+
+# timeout=15: Başka bir işlem dosyayı kullanıyorsa çökmek yerine 15 saniye sırasını bekler.
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, 
+    connect_args={"check_same_thread": False, "timeout": 15}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -63,6 +73,7 @@ class UserSetting(Base):
     setting_value = Column(Text)
 
 def init_db():
+    # Tabloları oluştur (eğer yoksa)
     Base.metadata.create_all(bind=engine)
 
 @contextmanager
@@ -90,7 +101,7 @@ def login_user(username, password):
             return user.id
         return None
 
-# --- DİĞER VERİTABANI FONKSİYONLARI (Kişiselleştirilmiş) ---
+# --- DİĞER VERİTABANI FONKSİYONLARI ---
 def save_setting(user_id, key, value):
     with get_db() as db:
         setting = db.query(UserSetting).filter(UserSetting.user_id == user_id, UserSetting.setting_key == key).first()
