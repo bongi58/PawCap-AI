@@ -41,13 +41,8 @@ st.markdown(
     </style>
     """, unsafe_allow_html=True,
 )
-
 # --- ÇEREZ (COOKIE) YÖNETİCİSİ ---
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+cookie_manager = stx.CookieManager(key="pawcap_cookie_manager")
 
 # --- OTURUM YÖNETİMİ ---
 if "logged_in_user_id" not in st.session_state:
