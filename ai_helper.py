@@ -46,7 +46,6 @@ def clean_json(raw_str):
         raw_str = raw_str[:-3]
     return raw_str.strip()
 
-# --- DÜZELTME: chat_history'yi güvenli işleme ---
 def process_content(prompt_text, text_content=None, file_path=None, config=None, chat_history=None):
     contents = []
     uploaded_file = None
@@ -61,14 +60,11 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None,
             raise ValueError("⚠️ Dosya işlenirken hata oluştu.")
         contents.append(uploaded_file)
 
-    # Bağlam oluşturma
     context_str = ""
     if chat_history and len(chat_history) > 0:
         context_str += "--- ÖNCEKİ SOHBET GEÇMİŞİ ---\n"
-        # Son 4 mesajı al (çok uzamasın)
-        for msg in chat_history[-4:]:
+        for msg in chat_history[-6:]: 
             role = "Sen (PawCap)" if msg.role == "assistant" else "Öğrenci"
-            # None veya boş içerik hatalarını engelle
             safe_content = str(msg.content) if msg.content else ""
             context_str += f"{role}: {safe_content}\n"
         context_str += "-------------------------------\n\n"
@@ -76,7 +72,6 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None,
     if text_content:
         context_str += f"--- İNCELENECEK DERS MATERYALİ ---\n{text_content}\n----------------------------------\n\n"
 
-    # Her şeyi tek bir güvenli metin bloğunda (string) birleştiriyoruz
     final_prompt = f"{context_str}Öğrencinin Yeni Sorusu/Talebi: {prompt_text}"
     contents.append(final_prompt)
 
@@ -85,8 +80,9 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None,
             system_instruction=(
                 "Sen PawCap'sin, zeki ve motive edici bir yapay zeka ders asistanısın. "
                 "Öğrenciyle sohbette konuyu detaylandır, farklı/ilginç örnekler ver. "
-                "Eğer öğrenci anlamazsa basitleştir veya metafor kullan. "
-                "Önceki sohbet geçmişini okuyup bağlama göre cevap ver (sürekli baştan başlama). "
+                "Öğrenci eğer senden quiz, test, soru, flashcard veya ezber kartı hazırlamanı isterse, "
+                "BUNLARI KESİNLİKLE METİN OLARAK UZUN UZUN YAZMA. Bunun yerine ona sadece şu mesajı ver: "
+                "'Sana özel interaktif arayüzü açabilmem için lütfen mesajında **quiz**, **test** veya **kart** kelimelerinden birini kullan.' "
                 "KESİNLİKLE VE SADECE TÜRKÇE CEVAP VER."
             ),
             temperature=0.7 
@@ -112,46 +108,48 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None,
                 continue
             
             if uploaded_file:
-                try: client.files.delete(name=uploaded_file.name)
-                except: pass
+                try: 
+                    client.files.delete(name=uploaded_file.name)
+                except: 
+                    pass
             raise e
 
-def generate_summary(text_content=None, file_path=None):
-    prompt = "Eklenen ders içeriğini öğrenci dostu ve akılda kalıcı bir şekilde özetle. LÜTFEN ÖZETİ KESİNLİKLE TÜRKÇE (TURKISH) OLARAK YAZ. Kaynak metin İngilizce olsa bile çevirip Türkçe özetle."
+def generate_summary(text_content=None, file_path=None, chat_history=None):
+    prompt = "Eklenen ders içeriğini veya sohbet geçmişini öğrenci dostu ve akılda kalıcı bir şekilde özetle. LÜTFEN ÖZETİ KESİNLİKLE TÜRKÇE (TURKISH) OLARAK YAZ."
     try:
-        res = process_content(prompt, text_content, file_path)
+        res = process_content(prompt, text_content, file_path, chat_history=chat_history)
         return res if res.strip() else "⚠️ İçerik okunamadı. Lütfen içeriği küçültüp tekrar deneyin."
     except Exception as e:
-        return "⚠️ Google sunucuları aşırı yoğun. PawCap çok uğraştı ama bağlanamadı, lütfen 1 dakika sonra tekrar dene."
+        return "⚠️ Google sunucuları aşırı yoğun. Lütfen 1 dakika sonra tekrar dene."
 
-def generate_structured_quiz(text_content=None, file_path=None):
-    prompt = "Eklenen ders içeriğini analiz et ve öğrenciyi test etmek için 5 soruluk quiz hazırla. Tüm içerik KESİNLİKLE TÜRKÇE olmalıdır."
+def generate_structured_quiz(text_content=None, file_path=None, chat_history=None):
+    prompt = "Eklenen ders içeriğini veya sohbet geçmişini analiz et ve öğrenciyi test etmek için 5 soruluk quiz hazırla. Tüm içerik KESİNLİKLE TÜRKÇE olmalıdır."
     quiz_config = types.GenerateContentConfig(
-        system_instruction="Sen PawCap'sin. Görevin, verilen metinden dışarı çıkmadan, tamamen bilgiye dayalı zorlayıcı akademik sorular hazırlamaktır. YANITLARIN TAMAMI TÜRKÇE OLMALIDIR.",
+        system_instruction="Sen PawCap'sin. Görevin, verilen metinden veya geçmiş sohbetten bilgiye dayalı zorlayıcı akademik sorular hazırlamaktır. YANITLARIN TAMAMI TÜRKÇE OLMALIDIR.",
         temperature=0.2, 
         response_mime_type="application/json",
         response_schema=QuizSchema,
     )
     try:
-        raw_json = process_content(prompt, text_content, file_path, config=quiz_config)
+        raw_json = process_content(prompt, text_content, file_path, config=quiz_config, chat_history=chat_history)
         cleaned = clean_json(raw_json)
         return json.loads(cleaned) if cleaned else None
     except Exception as e:
-        st.error("⚠️ Google sunucuları yoğun veya içerik okunamadı. Lütfen tekrar dene.")
+        st.error("⚠️ Sunucular yoğun veya içerik okunamadı.")
         return None
 
-def generate_flashcards(text_content=None, file_path=None):
-    prompt = "Eklenen ders içeriğini analiz et ve konuyu hızlıca tekrar edip ezberleyebilmesi için en önemli 5 kavram/soru üzerinden önlü arkalı çalışma kartları hazırla. KARTLARIN ÖN VE ARKA YÜZLERİ KESİNLİKLE TÜRKÇE OLMALIDIR."
+def generate_flashcards(text_content=None, file_path=None, chat_history=None):
+    prompt = "Eklenen ders içeriğini veya sohbet geçmişini analiz et ve konuyu hızlıca tekrar edip ezberleyebilmesi için en önemli 5 kavram/soru üzerinden önlü arkalı çalışma kartları hazırla. KARTLARIN ÖN VE ARKA YÜZLERİ KESİNLİKLE TÜRKÇE OLMALIDIR."
     flashcard_config = types.GenerateContentConfig(
-        system_instruction="Sen PawCap'sin. Sadece verilen metindeki en kritik kavramları seç ve kısa, net ezber kartları oluştur. YANITLARIN TAMAMI TÜRKÇE OLMALIDIR.",
+        system_instruction="Sen PawCap'sin. Verilen metinden veya sohbet geçmişinden en kritik kavramları seç ve kısa, net ezber kartları oluştur. YANITLARIN TAMAMI TÜRKÇE OLMALIDIR.",
         temperature=0.2, 
         response_mime_type="application/json",
         response_schema=FlashcardSchema,
     )
     try:
-        raw_json = process_content(prompt, text_content, file_path, config=flashcard_config)
+        raw_json = process_content(prompt, text_content, file_path, config=flashcard_config, chat_history=chat_history)
         cleaned = clean_json(raw_json)
         return json.loads(cleaned) if cleaned else None
     except Exception as e:
-        st.error("⚠️ Google sunucuları yoğun veya içerik okunamadı. Lütfen tekrar dene.")
+        st.error("⚠️ Sunucular yoğun veya içerik okunamadı.")
         return None
