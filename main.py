@@ -41,6 +41,7 @@ st.markdown(
     </style>
     """, unsafe_allow_html=True,
 )
+
 # --- ÇEREZ (COOKIE) YÖNETİCİSİ ---
 cookie_manager = stx.CookieManager(key="pawcap_cookie_manager")
 
@@ -257,8 +258,7 @@ else:
                             save_chat_message(sess_id, "assistant", res)
                             earn_badge(user_id, "Özet Ustası", "📝")
                             st.download_button("📥 Bu Özeti İndir", data=res, file_name="PawCap_Ozet.txt")
-                            st.session_state.flashcards_by_session[sess_id] = None
-                            st.session_state.quiz_by_session[sess_id] = None
+                            # ARTIK DİĞER ARAÇLARI SİLMİYORUZ
 
                 elif "quiz" in p_lower or "test" in p_lower or "soru" in p_lower:
                     if not active_f and not safe_text:
@@ -268,7 +268,7 @@ else:
                             st.session_state.quiz_by_session[sess_id] = generate_structured_quiz(text_content=safe_text, file_path=active_f)
                             st.session_state.selected_answers_by_session[sess_id] = {}
                             st.session_state.quiz_submitted_by_session[sess_id] = False
-                            st.session_state.flashcards_by_session[sess_id] = None
+                            # ARTIK DİĞER ARAÇLARI SİLMİYORUZ
                             st.write("🎯 Sınav hazırlandı! Hemen aşağıdan işaretleyebilirsin.")
                             save_chat_message(sess_id, "assistant", "🎯 Sınav hazırlandı!")
                             earn_badge(user_id, "Sınav Avcısı", "🎯")
@@ -279,7 +279,7 @@ else:
                     else:
                         with st.spinner("Ezber kartları derleniyor..."):
                             st.session_state.flashcards_by_session[sess_id] = generate_flashcards(text_content=safe_text, file_path=active_f)
-                            st.session_state.quiz_by_session[sess_id] = None
+                            # ARTIK DİĞER ARAÇLARI SİLMİYORUZ
                             st.write("🃏 Senin için önemli kavramlardan ezber kartları oluşturdum!")
                             save_chat_message(sess_id, "assistant", "🃏 Kartlar hazır!")
                             earn_badge(user_id, "Hafıza Şampiyonu", "🧠")
@@ -310,7 +310,7 @@ else:
             else:
                 st.info(f"**KAVRAM / SORU:**\n\n{curr['front']}", icon="❓")
 
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4) # Kapatma butonu için 4 kolona ayırdık
             if c1.button("🔙 Önceki", use_container_width=True, key=f"prev_{sess_id}"):
                 st.session_state[f"card_idx_{sess_id}"] = max(0, st.session_state[f"card_idx_{sess_id}"] - 1)
                 st.session_state[f"flipped_{sess_id}"] = False
@@ -321,6 +321,9 @@ else:
             if c3.button("Sonraki 🔜", use_container_width=True, key=f"next_{sess_id}"):
                 st.session_state[f"card_idx_{sess_id}"] = min(len(cards) - 1, st.session_state[f"card_idx_{sess_id}"] + 1)
                 st.session_state[f"flipped_{sess_id}"] = False
+                st.rerun()
+            if c4.button("❌ Kapat", use_container_width=True, key=f"close_flash_{sess_id}"):
+                st.session_state.flashcards_by_session[sess_id] = None
                 st.rerun()
 
     if st.session_state.quiz_by_session.get(sess_id):
