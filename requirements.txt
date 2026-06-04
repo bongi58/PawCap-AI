@@ -1,6 +1,7 @@
 streamlit
 google-genai
-pydantic
 sqlalchemy
 pandas
+pydantic
 python-dotenv
+extra-streamlit-components

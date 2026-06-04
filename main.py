@@ -1,7 +1,9 @@
 import os
 import json
+import datetime
 import pandas as pd
 import streamlit as st
+import extra_streamlit_components as stx
 from ai_helper import generate_structured_quiz, generate_summary, generate_flashcards, process_content
 from database import (
     init_db, save_quiz_score, create_new_chat_session,
@@ -23,36 +25,43 @@ ASSISTANT_AVATAR = LOGO_PATH if HAS_CUSTOM_LOGO else None
 
 st.set_page_config(page_title="PawCap AI", layout="wide")
 
-# --- ODAKLANMA VE DERS ÇALIŞMA MOTİVASYONU ODAKLI YENİ TASARIM (PREMIUM BLUE/TEAL) ---
 st.markdown(
     """
     <style>
     .stApp { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: white; border-right: 2px solid #e2e8f0; }
-    
-    /* Premium Odaklanma Butonları (İndigo'dan Canlı Maviye Geçiş) */
     .stButton>button { background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%); color: white; border-radius: 12px; font-weight: bold; border: none; box-shadow: 0 4px 10px rgba(79,70,229,0.15); transition: all 0.3s; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79,70,229,0.3); }
-    
-    /* Çalışma Kartları ve Konteynerlar */
     .premium-card { background: white; padding: 20px; border-radius: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 10px rgba(0,0,0,0.02); margin-top: 15px; margin-bottom: 15px; }
-    
-    /* Profesyonel Mesaj Baloncukları */
     [data-testid="stChatMessage"] { border-radius: 15px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0;}
     [data-testid="stChatMessage"]:nth-child(even) { background-color: #4f46e5; color: white; margin-left: 20%; }
     [data-testid="stChatMessage"]:nth-child(even) p { color: white !important; }
     [data-testid="stChatMessage"]:nth-child(odd) { background-color: white; color: #1e293b; margin-right: 20%; }
-    
     .todo-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;}
     </style>
     """, unsafe_allow_html=True,
 )
+
+# --- ÇEREZ (COOKIE) YÖNETİCİSİ ---
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
 
 # --- OTURUM YÖNETİMİ ---
 if "logged_in_user_id" not in st.session_state:
     st.session_state.logged_in_user_id = None
 if "username" not in st.session_state:
     st.session_state.username = None
+
+# Tarayıcıdan otomatik giriş kontrolü (Beni Hatırla)
+cached_user_id = cookie_manager.get(cookie="pawcap_user_id")
+cached_username = cookie_manager.get(cookie="pawcap_username")
+
+if cached_user_id and cached_username and st.session_state.logged_in_user_id is None:
+    st.session_state.logged_in_user_id = int(cached_user_id)
+    st.session_state.username = cached_username
 
 # --- GİRİŞ / KAYIT EKRANI ---
 if st.session_state.logged_in_user_id is None:
@@ -65,11 +74,20 @@ if st.session_state.logged_in_user_id is None:
         with tab_login:
             log_user = st.text_input("Kullanıcı Adı", key="log_u")
             log_pass = st.text_input("Şifre", type="password", key="log_p")
+            beni_hatirla = st.checkbox("Beni Hatırla", value=True)
+            
             if st.button("Giriş Yap", use_container_width=True):
                 user_id = login_user(log_user, log_pass)
                 if user_id:
                     st.session_state.logged_in_user_id = user_id
                     st.session_state.username = log_user
+                    
+                    if beni_hatirla:
+                        # 30 günlük süre tanımla
+                        expire_date = datetime.datetime.now() + datetime.timedelta(days=30)
+                        cookie_manager.set("pawcap_user_id", str(user_id), expires_at=expire_date)
+                        cookie_manager.set("pawcap_username", log_user, expires_at=expire_date)
+                        
                     st.rerun()
                 else:
                     st.error("Kullanıcı adı veya şifre hatalı!")
@@ -96,12 +114,17 @@ user_id = st.session_state.logged_in_user_id
 # Verileri Yükle
 if "planner_loaded" not in st.session_state:
     todo_json = get_setting(user_id, "todo_list")
-    st.session_state.todos = json.loads(todo_json) if todo_json else [{"id": 1, "task": "DGS Denemesi Çöz", "done": False}]
+    st.session_state.todos = json.loads(todo_json) if todo_json else [{"id": 1, "task": "Hedeflerini belirle!", "done": False}]
     st.session_state.planner_loaded = True
 
+# --- SOHBET BAZLI AKTİF HAFIZA TANIMLAMALARI ---
 defaults = {
-    "current_session_id": None, "flashcards": None, "quiz_data": None,
-    "selected_answers": {}, "quiz_submitted": False, "active_content_name": "Genel İçerik",
+    "current_session_id": None,
+    "flashcards_by_session": {},    
+    "quiz_by_session": {},          
+    "selected_answers_by_session": {}, 
+    "quiz_submitted_by_session": {},   
+    "active_content_name": "Genel İçerik",
     "temp_text_input": "", "temp_file_path": None
 }
 for key, val in defaults.items():
@@ -114,7 +137,11 @@ def save_todos():
 # --- SOL MENÜ (SIDEBAR) ---
 with st.sidebar:
     st.markdown(f"<div style='text-align:center; padding:10px; background:#f0f4f8; border-radius:12px; color:#4f46e5; font-weight:bold; font-size:18px;'>👤 {st.session_state.username}</div>", unsafe_allow_html=True)
+    
     if st.button("🚪 Çıkış Yap"):
+        # Çıkış yapıldığında çerezleri de temizle
+        cookie_manager.delete("pawcap_user_id")
+        cookie_manager.delete("pawcap_username")
         st.session_state.clear()
         st.rerun()
 
@@ -182,9 +209,6 @@ with st.sidebar:
     st.write("---")
     if st.button("➕ Yeni Sohbet Başlat", use_container_width=True):
         st.session_state.current_session_id = create_new_chat_session(user_id)
-        for key in ["flashcards", "quiz_data"]: st.session_state[key] = None
-        st.session_state.selected_answers = {}
-        st.session_state.quiz_submitted = False
         st.rerun()
 
     st.markdown("### 🗄️ Geçmiş Sohbetlerin")
@@ -192,9 +216,6 @@ with st.sidebar:
     for s in sessions:
         if st.button(f"📄 {s.title}", key=f"sess_{s.id}", use_container_width=True):
             st.session_state.current_session_id = s.id
-            for key in ["flashcards", "quiz_data"]: st.session_state[key] = None
-            st.session_state.selected_answers = {}
-            st.session_state.quiz_submitted = False
             st.rerun()
 
 # --- ANA EKRAN (SOHBET) ---
@@ -206,20 +227,21 @@ if not st.session_state.current_session_id:
         </div>""", unsafe_allow_html=True,
     )
 else:
-    active_session = next((s for s in sessions if s.id == st.session_state.current_session_id), None)
+    sess_id = st.session_state.current_session_id
+    active_session = next((s for s in sessions if s.id == sess_id), None)
     session_title = active_session.title if active_session else "Sohbet Odası"
 
     st.subheader(f"💬 {session_title}")
 
-    messages = get_messages_for_session(st.session_state.current_session_id)
+    messages = get_messages_for_session(sess_id)
     for msg in messages:
         avatar_img = ASSISTANT_AVATAR if msg.role == "assistant" else "user"
         with st.chat_message(msg.role, avatar=avatar_img):
             st.markdown(msg.content)
 
     if prompt := st.chat_input("Bana bir görev ver veya sohbet et..."):
-        save_chat_message(st.session_state.current_session_id, "user", prompt)
-        update_chat_session_title(st.session_state.current_session_id, prompt)
+        save_chat_message(sess_id, "user", prompt)
+        update_chat_session_title(sess_id, prompt)
 
         with st.chat_message("user", avatar="user"):
             st.write(prompt)
@@ -237,20 +259,23 @@ else:
                         with st.spinner("İçerik analiz edilip özetleniyor..."):
                             res = generate_summary(text_content=safe_text, file_path=active_f)
                             st.markdown(res)
-                            save_chat_message(st.session_state.current_session_id, "assistant", res)
+                            save_chat_message(sess_id, "assistant", res)
                             earn_badge(user_id, "Özet Ustası", "📝")
                             st.download_button("📥 Bu Özeti İndir", data=res, file_name="PawCap_Ozet.txt")
-                            st.session_state.flashcards, st.session_state.quiz_data = None, None
+                            st.session_state.flashcards_by_session[sess_id] = None
+                            st.session_state.quiz_by_session[sess_id] = None
 
                 elif "quiz" in p_lower or "test" in p_lower or "soru" in p_lower:
                     if not active_f and not safe_text:
                         st.write("⚠️ Soru hazırlayabilmem için not eklemelisin!")
                     else:
                         with st.spinner("İnteraktif sorular hazırlanıyor..."):
-                            st.session_state.quiz_data = generate_structured_quiz(text_content=safe_text, file_path=active_f)
-                            st.session_state.selected_answers, st.session_state.quiz_submitted, st.session_state.flashcards = {}, False, None
+                            st.session_state.quiz_by_session[sess_id] = generate_structured_quiz(text_content=safe_text, file_path=active_f)
+                            st.session_state.selected_answers_by_session[sess_id] = {}
+                            st.session_state.quiz_submitted_by_session[sess_id] = False
+                            st.session_state.flashcards_by_session[sess_id] = None
                             st.write("🎯 Sınav hazırlandı! Hemen aşağıdan işaretleyebilirsin.")
-                            save_chat_message(st.session_state.current_session_id, "assistant", "🎯 Sınav hazırlandı!")
+                            save_chat_message(sess_id, "assistant", "🎯 Sınav hazırlandı!")
                             earn_badge(user_id, "Sınav Avcısı", "🎯")
 
                 elif "flashcard" in p_lower or "kart" in p_lower:
@@ -258,16 +283,16 @@ else:
                         st.write("⚠️ Kart hazırlayabilmem için içeriği eklemelisin!")
                     else:
                         with st.spinner("Ezber kartları derleniyor..."):
-                            st.session_state.flashcards = generate_flashcards(text_content=safe_text, file_path=active_f)
-                            st.session_state.quiz_data = None
+                            st.session_state.flashcards_by_session[sess_id] = generate_flashcards(text_content=safe_text, file_path=active_f)
+                            st.session_state.quiz_by_session[sess_id] = None
                             st.write("🃏 Senin için önemli kavramlardan ezber kartları oluşturdum!")
-                            save_chat_message(st.session_state.current_session_id, "assistant", "🃏 Kartlar hazır!")
+                            save_chat_message(sess_id, "assistant", "🃏 Kartlar hazır!")
                             earn_badge(user_id, "Hafıza Şampiyonu", "🧠")
                 else:
                     with st.spinner("PawCap düşünüyor..."):
                         res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f, chat_history=messages)
                         st.markdown(res)
-                        save_chat_message(st.session_state.current_session_id, "assistant", res)
+                        save_chat_message(sess_id, "assistant", res)
             except Exception as e:
                 st.error(f"Hata: {str(e)}")
             finally:
@@ -275,56 +300,61 @@ else:
                     os.remove(active_f)
                     st.session_state.temp_file_path = None
 
-    # --- Flashcard & Quiz Modülleri ---
-    if st.session_state.flashcards:
+    if st.session_state.flashcards_by_session.get(sess_id):
         with st.container(border=True):
             st.markdown("### 🃏 Flashcard Çalışma Modu")
-            cards = st.session_state.flashcards["cards"]
-            if "card_idx" not in st.session_state: st.session_state.card_idx = 0
-            if "flipped" not in st.session_state: st.session_state.flipped = False
-
-            curr = cards[st.session_state.card_idx]
+            cards = st.session_state.flashcards_by_session[sess_id]["cards"]
             
-            if st.session_state.flipped:
+            if f"card_idx_{sess_id}" not in st.session_state: st.session_state[f"card_idx_{sess_id}"] = 0
+            if f"flipped_{sess_id}" not in st.session_state: st.session_state[f"flipped_{sess_id}"] = False
+
+            curr = cards[st.session_state[f"card_idx_{sess_id}"]]
+            
+            if st.session_state[f"flipped_{sess_id}"]:
                 st.success(f"**CEVAP:**\n\n{curr['back']}", icon="💡")
             else:
                 st.info(f"**KAVRAM / SORU:**\n\n{curr['front']}", icon="❓")
 
             c1, c2, c3 = st.columns(3)
-            if c1.button("🔙 Önceki", use_container_width=True):
-                st.session_state.card_idx = max(0, st.session_state.card_idx - 1)
-                st.session_state.flipped = False
+            if c1.button("🔙 Önceki", use_container_width=True, key=f"prev_{sess_id}"):
+                st.session_state[f"card_idx_{sess_id}"] = max(0, st.session_state[f"card_idx_{sess_id}"] - 1)
+                st.session_state[f"flipped_{sess_id}"] = False
                 st.rerun()
-            if c2.button("🔄 Çevir", use_container_width=True):
-                st.session_state.flipped = not st.session_state.flipped
+            if c2.button("🔄 Çevir", use_container_width=True, key=f"flip_{sess_id}"):
+                st.session_state[f"flipped_{sess_id}"] = not st.session_state[f"flipped_{sess_id}"]
                 st.rerun()
-            if c3.button("Sonraki 🔜", use_container_width=True):
-                st.session_state.card_idx = min(len(cards) - 1, st.session_state.card_idx + 1)
-                st.session_state.flipped = False
+            if c3.button("Sonraki 🔜", use_container_width=True, key=f"next_{sess_id}"):
+                st.session_state[f"card_idx_{sess_id}"] = min(len(cards) - 1, st.session_state[f"card_idx_{sess_id}"] + 1)
+                st.session_state[f"flipped_{sess_id}"] = False
                 st.rerun()
 
-    if st.session_state.quiz_data:
+    if st.session_state.quiz_by_session.get(sess_id):
         with st.container(border=True):
             st.markdown("### 📝 Kendini Test Et")
-            questions = st.session_state.quiz_data.get("questions", [])
+            questions = st.session_state.quiz_by_session[sess_id].get("questions", [])
+
+            if sess_id not in st.session_state.selected_answers_by_session:
+                st.session_state.selected_answers_by_session[sess_id] = {}
+            if sess_id not in st.session_state.quiz_submitted_by_session:
+                st.session_state.quiz_submitted_by_session[sess_id] = False
 
             for idx, q_data in enumerate(questions):
                 st.markdown(f"#### Soru {idx + 1}: {q_data['question_text']}")
-                cevap = st.radio("Şıklar:", q_data["options"], key=f"q_main_{idx}", index=None, disabled=st.session_state.quiz_submitted)
-                if cevap: st.session_state.selected_answers[idx] = cevap
+                cevap = st.radio("Şıklar:", q_data["options"], key=f"q_{sess_id}_{idx}", index=None, disabled=st.session_state.quiz_submitted_by_session[sess_id])
+                if cevap: st.session_state.selected_answers_by_session[sess_id][idx] = cevap
             
-            if not st.session_state.quiz_submitted:
+            if not st.session_state.quiz_submitted_by_session[sess_id]:
                 st.write("")
-                if st.button("✅ Quizi Bitir ve Puanla", key="btn_finish_main"):
-                    st.session_state.quiz_submitted = True
+                if st.button("✅ Quizi Bitir ve Puanla", key=f"btn_finish_{sess_id}"):
+                    st.session_state.quiz_submitted_by_session[sess_id] = True
                     st.rerun()
 
-            if st.session_state.quiz_submitted:
+            if st.session_state.quiz_submitted_by_session[sess_id]:
                 st.write("---")
                 dogru_sayisi, toplam_soru = 0, len(questions)
 
                 for idx, q_data in enumerate(questions):
-                    kullanici_cevabi = st.session_state.selected_answers.get(idx, "")
+                    kullanici_cevabi = st.session_state.selected_answers_by_session[sess_id].get(idx, "")
                     dogru_cevap = q_data["correct_answer"]
                     with st.expander(f"Soru {idx + 1} Analizi", expanded=True):
                         st.write(f"**Senin Cevabın:** `{kullanici_cevabi}`")
@@ -339,6 +369,8 @@ else:
                 st.metric(label="Başarı Puanın", value=f"{dogru_sayisi} / {toplam_soru}", delta=f"%{basari_yuzdesi}")
                 save_quiz_score(user_id, st.session_state.active_content_name, dogru_sayisi, toplam_soru)
 
-                if st.button("Kapat", key="btn_close_main"):
-                    st.session_state.quiz_data, st.session_state.selected_answers, st.session_state.quiz_submitted = None, {}, False
+                if st.button("Kapat", key=f"btn_close_{sess_id}"):
+                    st.session_state.quiz_by_session[sess_id] = None
+                    st.session_state.selected_answers_by_session[sess_id] = {}
+                    st.session_state.quiz_submitted_by_session[sess_id] = False
                     st.rerun()
