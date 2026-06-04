@@ -35,7 +35,6 @@ class Flashcard(BaseModel):
 class FlashcardSchema(BaseModel):
     cards: list[Flashcard]
 
-# --- YENİ: YAPAY ZEKANIN FORMAT HATALARINI TEMİZLEYEN FONKSİYON ---
 def clean_json(raw_str):
     if not raw_str: return ""
     raw_str = raw_str.strip()
@@ -47,7 +46,8 @@ def clean_json(raw_str):
         raw_str = raw_str[:-3]
     return raw_str.strip()
 
-def process_content(prompt_text, text_content=None, file_path=None, config=None):
+# --- DÜZELTME: chat_history'yi güvenli işleme ---
+def process_content(prompt_text, text_content=None, file_path=None, config=None, chat_history=None):
     contents = []
     uploaded_file = None
 
@@ -61,18 +61,37 @@ def process_content(prompt_text, text_content=None, file_path=None, config=None)
             raise ValueError("⚠️ Dosya işlenirken hata oluştu.")
         contents.append(uploaded_file)
 
-    if text_content:
-        contents.append(f"Ders İçeriği:\n{text_content}")
+    # Bağlam oluşturma
+    context_str = ""
+    if chat_history and len(chat_history) > 0:
+        context_str += "--- ÖNCEKİ SOHBET GEÇMİŞİ ---\n"
+        # Son 4 mesajı al (çok uzamasın)
+        for msg in chat_history[-4:]:
+            role = "Sen (PawCap)" if msg.role == "assistant" else "Öğrenci"
+            # None veya boş içerik hatalarını engelle
+            safe_content = str(msg.content) if msg.content else ""
+            context_str += f"{role}: {safe_content}\n"
+        context_str += "-------------------------------\n\n"
 
-    contents.append(prompt_text)
+    if text_content:
+        context_str += f"--- İNCELENECEK DERS MATERYALİ ---\n{text_content}\n----------------------------------\n\n"
+
+    # Her şeyi tek bir güvenli metin bloğunda (string) birleştiriyoruz
+    final_prompt = f"{context_str}Öğrencinin Yeni Sorusu/Talebi: {prompt_text}"
+    contents.append(final_prompt)
 
     if not config:
         config = types.GenerateContentConfig(
-            system_instruction="Sen zeki ve motive edici bir yapay zeka ders asistanı olan PawCap'sin. Kullanıcının gönderdiği metin hangi dilde olursa olsun, KESİNLİKLE ve SADECE TÜRKÇE yanıt vermelisin.",
+            system_instruction=(
+                "Sen PawCap'sin, zeki ve motive edici bir yapay zeka ders asistanısın. "
+                "Öğrenciyle sohbette konuyu detaylandır, farklı/ilginç örnekler ver. "
+                "Eğer öğrenci anlamazsa basitleştir veya metafor kullan. "
+                "Önceki sohbet geçmişini okuyup bağlama göre cevap ver (sürekli baştan başlama). "
+                "KESİNLİKLE VE SADECE TÜRKÇE CEVAP VER."
+            ),
             temperature=0.7 
         )
 
-    # --- DAHA SABIRLI YENİDEN DENEME (5 Kez, 4 Saniye) ---
     max_retries = 5
     for attempt in range(max_retries):
         try:
@@ -106,7 +125,7 @@ def generate_summary(text_content=None, file_path=None):
         return "⚠️ Google sunucuları aşırı yoğun. PawCap çok uğraştı ama bağlanamadı, lütfen 1 dakika sonra tekrar dene."
 
 def generate_structured_quiz(text_content=None, file_path=None):
-    prompt = "Eklenen ders içeriğini analiz et ve öğrenciyi test etmek için 3 soruluk quiz hazırla. Tüm içerik KESİNLİKLE TÜRKÇE olmalıdır."
+    prompt = "Eklenen ders içeriğini analiz et ve öğrenciyi test etmek için 5 soruluk quiz hazırla. Tüm içerik KESİNLİKLE TÜRKÇE olmalıdır."
     quiz_config = types.GenerateContentConfig(
         system_instruction="Sen PawCap'sin. Görevin, verilen metinden dışarı çıkmadan, tamamen bilgiye dayalı zorlayıcı akademik sorular hazırlamaktır. YANITLARIN TAMAMI TÜRKÇE OLMALIDIR.",
         temperature=0.2, 

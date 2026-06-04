@@ -10,7 +10,7 @@ from database import (
     save_setting, get_setting, register_user, login_user
 )
 
-# Veritabanını başlat (Silme kodu KALDIRILDI!)
+# Veritabanını başlat
 init_db()
 
 TEMP_DIR = "temp_uploads"
@@ -23,19 +23,27 @@ ASSISTANT_AVATAR = LOGO_PATH if HAS_CUSTOM_LOGO else None
 
 st.set_page_config(page_title="PawCap AI", layout="wide")
 
+# --- ODAKLANMA VE DERS ÇALIŞMA MOTİVASYONU ODAKLI YENİ TASARIM (PREMIUM BLUE/TEAL) ---
 st.markdown(
     """
     <style>
-    .stApp { background-color: #fff5f8; font-family: 'Segoe UI', sans-serif; }
-    [data-testid="stSidebar"] { background-color: white; border-right: 2px solid #ffeef2; }
-    .stButton>button { background: linear-gradient(135deg, #ff85a1 0%, #ff6b8b 100%); color: white; border-radius: 12px; font-weight: bold; border: none; box-shadow: 0 4px 10px rgba(255,107,139,0.2); transition: all 0.3s; }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(255,107,139,0.3); }
-    .premium-card { background: white; padding: 20px; border-radius: 15px; border: 1px solid #ffeef2; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-top: 15px; margin-bottom: 15px; }
-    [data-testid="stChatMessage"] { border-radius: 15px; padding: 15px; margin-bottom: 15px; border: 1px solid #ffeef2;}
-    [data-testid="stChatMessage"]:nth-child(even) { background-color: #ff85a1; color: white; margin-left: 20%; }
+    .stApp { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+    [data-testid="stSidebar"] { background-color: white; border-right: 2px solid #e2e8f0; }
+    
+    /* Premium Odaklanma Butonları (İndigo'dan Canlı Maviye Geçiş) */
+    .stButton>button { background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%); color: white; border-radius: 12px; font-weight: bold; border: none; box-shadow: 0 4px 10px rgba(79,70,229,0.15); transition: all 0.3s; }
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79,70,229,0.3); }
+    
+    /* Çalışma Kartları ve Konteynerlar */
+    .premium-card { background: white; padding: 20px; border-radius: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 10px rgba(0,0,0,0.02); margin-top: 15px; margin-bottom: 15px; }
+    
+    /* Profesyonel Mesaj Baloncukları */
+    [data-testid="stChatMessage"] { border-radius: 15px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0;}
+    [data-testid="stChatMessage"]:nth-child(even) { background-color: #4f46e5; color: white; margin-left: 20%; }
     [data-testid="stChatMessage"]:nth-child(even) p { color: white !important; }
-    [data-testid="stChatMessage"]:nth-child(odd) { background-color: white; color: #8a606d; margin-right: 20%; }
-    .todo-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ffeef2;}
+    [data-testid="stChatMessage"]:nth-child(odd) { background-color: white; color: #1e293b; margin-right: 20%; }
+    
+    .todo-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -48,7 +56,7 @@ if "username" not in st.session_state:
 
 # --- GİRİŞ / KAYIT EKRANI ---
 if st.session_state.logged_in_user_id is None:
-    st.markdown("<div style='text-align:center; padding-top:40px;'><h1 style='color:#ff85a1;'>PawCap AI'ye Hoş Geldin</h1><p>Kişisel asistanına erişmek için giriş yap.</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center; padding-top:40px;'><h1 style='color:#4f46e5;'>PawCap AI'ye Hoş Geldin</h1><p style='color:#64748b;'>Kişisel asistanına erişmek için giriş yap.</p></div>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -105,7 +113,7 @@ def save_todos():
 
 # --- SOL MENÜ (SIDEBAR) ---
 with st.sidebar:
-    st.markdown(f"<div style='text-align:center; padding:10px; background:#ffeef2; border-radius:12px; color:#ff85a1; font-weight:bold; font-size:18px;'>👤 Hoş geldin, {st.session_state.username}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; padding:10px; background:#f0f4f8; border-radius:12px; color:#4f46e5; font-weight:bold; font-size:18px;'>👤 {st.session_state.username}</div>", unsafe_allow_html=True)
     if st.button("🚪 Çıkış Yap"):
         st.session_state.clear()
         st.rerun()
@@ -167,7 +175,7 @@ with st.sidebar:
                 "Başarı (%)": (s.score / s.total_questions) * 100 if s.total_questions > 0 else 0
             } for s in scores])
             df.set_index("Tarih", inplace=True)
-            st.line_chart(df, y="Başarı (%)", color="#ff6b8b")
+            st.line_chart(df, y="Başarı (%)", color="#4f46e5")
         else:
             st.caption("Henüz quiz çözmedin. Grafiğin burada belirecek!")
 
@@ -193,8 +201,8 @@ with st.sidebar:
 if not st.session_state.current_session_id:
     st.markdown(
         """<div style='text-align:center; padding-top:80px;'>
-        <h1 style='color:#ff85a1; font-size:45px;'>PawCap AI Asistanına Hoş Geldin</h1>
-        <p style='color:#8a606d; font-size:18px;'>Sol menüden planını yap, materyalini ekle ve sohbete başla.</p>
+        <h1 style='color:#4f46e5; font-size:45px;'>PawCap AI Asistanı</h1>
+        <p style='color:#64748b; font-size:18px;'>Sol menüden planını yap, materyalini ekle ve odaklanarak çalışmaya başla.</p>
         </div>""", unsafe_allow_html=True,
     )
 else:
@@ -224,7 +232,7 @@ else:
             try:
                 if "özet" in p_lower or "kısaca" in p_lower:
                     if not active_f and not safe_text:
-                        st.write("⚠️ Özet çıkarmam için sol menüden bir dosya yüklemelisin!")
+                        st.write("⚠️ Özet çıkarmam için sol menüden bir dosya yüklemeli veya metin yapıştırmalısın!")
                     else:
                         with st.spinner("İçerik analiz edilip özetleniyor..."):
                             res = generate_summary(text_content=safe_text, file_path=active_f)
@@ -257,7 +265,7 @@ else:
                             earn_badge(user_id, "Hafıza Şampiyonu", "🧠")
                 else:
                     with st.spinner("PawCap düşünüyor..."):
-                        res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f)
+                        res = process_content(prompt_text=prompt, text_content=safe_text, file_path=active_f, chat_history=messages)
                         st.markdown(res)
                         save_chat_message(st.session_state.current_session_id, "assistant", res)
             except Exception as e:
@@ -267,7 +275,7 @@ else:
                     os.remove(active_f)
                     st.session_state.temp_file_path = None
 
-    # --- Flashcard & Quiz Modülleri (KOPYALAR TEMİZLENDİ) ---
+    # --- Flashcard & Quiz Modülleri ---
     if st.session_state.flashcards:
         with st.container(border=True):
             st.markdown("### 🃏 Flashcard Çalışma Modu")
